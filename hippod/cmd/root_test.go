@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"bytes"
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -18,14 +20,51 @@ import (
 )
 
 func TestNewRootCmd(t *testing.T) {
+	// Create root command
 	rootCmd := NewRootCmd()
 
+	// Check basic properties
 	require.NotNil(t, rootCmd, "rootCmd should not be nil")
 	require.IsType(t, &cobra.Command{}, rootCmd, "rootCmd should be of type *cobra.Command")
 	require.Equal(t, "hippod", rootCmd.Use, "Command name should be 'hippod'")
 	require.NotEmpty(t, rootCmd.Commands(), "rootCmd should have subcommands")
-	require.Equal(t, "Hippo App", rootCmd.Short, "Command name should be 'hippod'")
+	require.Equal(t, "Hippo App", rootCmd.Short, "Command name should be 'Hippo App'")
 
+	// Mock PersistentPreRunE to simulate no error (success path)
+	mockPersistentPreRun := func(cmd *cobra.Command, args []string) error {
+		// Simulate no error (success case)
+		return nil
+	}
+
+	// Set PersistentPreRunE to the mock function for testing
+	rootCmd.PersistentPreRunE = mockPersistentPreRun
+
+	// Run the command with a mocked environment and check that no error occurs
+	err := rootCmd.ExecuteContext(context.Background())
+	require.NoError(t, err, "Execute should not return an error")
+
+	// Now, simulate a failure scenario for PersistentPreRunE
+	// Mock PersistentPreRunE to simulate an error condition
+	mockPersistentPreRun = func(cmd *cobra.Command, args []string) error {
+		return fmt.Errorf("mock error in PersistentPreRunE")
+	}
+
+	// Set PersistentPreRunE to the mock function with the error case
+	rootCmd.PersistentPreRunE = mockPersistentPreRun
+
+	// Run the command again and verify that an error occurs
+	err = rootCmd.ExecuteContext(context.Background())
+	require.Error(t, err, "Execute should return an error")
+	require.Contains(t, err.Error(), "mock error in PersistentPreRunE", "Error should match the mock error")
+
+	// Also check if the subcommands are executed correctly
+	for _, cmd := range rootCmd.Commands() {
+		t.Run(fmt.Sprintf("subcommand-%s", cmd.Name()), func(t *testing.T) {
+			// Check that each subcommand can be executed (no errors)
+			err := cmd.ExecuteContext(context.Background())
+			require.NoError(t, err, "Subcommand should execute without errors")
+		})
+	}
 }
 
 func TestInitCometBFTConfig(t *testing.T) {
